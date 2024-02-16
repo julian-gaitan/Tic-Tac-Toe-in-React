@@ -1,11 +1,11 @@
 
 import { useState } from "react";
 
-function Square({ value, onSquareClick }) {
+function Square({ value, onSquareClick, addWinnerDecoration }) {
 
   return (
     <button
-      className="square"
+      className={"square" + (addWinnerDecoration ? " square-winner" : "") }
       onClick={onSquareClick}
     >
       {value}
@@ -13,46 +13,69 @@ function Square({ value, onSquareClick }) {
   );
 }
 
-function Board({ squares, xIsNext, onPlay }) {
-
-  const winner = calculateWinner(squares);
-  const status = winner ? 
-    ( `Winner: ${winner}` ) 
-    : 
-    ( `Next player: ${xIsNext ? "X" : "O"}` );
+function MovesListOrder({ isDescenOrder, onReorder }) {
   
-    function handleClick(i) {
-      if (!squares[i] && !calculateWinner(squares)) {
-        const nextSquares = squares.slice();
-        nextSquares[i] = xIsNext ? "X" : "O";
-        onPlay(nextSquares);
-      }
-    }
+  function handleChange(e) {
+    const { id } = e.target;
+    onReorder(id === "des");
+  }
 
-  return (<>
-    <div className="status">{status}</div>
-    <div className="board-row">
-      <Square value={squares[0]} onSquareClick={() => handleClick(0)} />
-      <Square value={squares[1]} onSquareClick={() => handleClick(1)} />
-      <Square value={squares[2]} onSquareClick={() => handleClick(2)} />
-    </div>
-    <div className="board-row">
-      <Square value={squares[3]} onSquareClick={() => handleClick(3)} />
-      <Square value={squares[4]} onSquareClick={() => handleClick(4)} />
-      <Square value={squares[5]} onSquareClick={() => handleClick(5)} />
-    </div>
-    <div className="board-row">
-      <Square value={squares[6]} onSquareClick={() => handleClick(6)} />
-      <Square value={squares[7]} onSquareClick={() => handleClick(7)} />
-      <Square value={squares[8]} onSquareClick={() => handleClick(8)} />
-    </div>
-  </>);
+  return (
+    <fieldset className="game-order">
+      <legend>Move Order</legend>
+      <input type="radio" name="move-order" id="asc" checked={!isDescenOrder} 
+        onChange={handleChange}
+       />
+      <label htmlFor="asc">Ascending</label>
+      <br />
+      <input type="radio" name="move-order" id="des" checked={isDescenOrder} 
+        onChange={handleChange}/>
+      <label htmlFor="des">Descending</label>
+    </fieldset>
+  );
+}
+
+function Board({ squares, xIsNext, onPlay }) {
+  const { winner, cells } = calculateWinner(squares);
+  const cellsPlayed = squares.reduce((prev, curr) => prev += curr != null, 0);
+  const status = winner
+    ? `Winner: ${winner}`
+    : ( cellsPlayed < squares.length ? `Next player: ${xIsNext ? "X" : "O"}` : "Is a DRAW");
+
+  function handleClick(i) {
+    if (!squares[i] && !calculateWinner(squares).winner) {
+      const nextSquares = squares.slice();
+      nextSquares[i] = xIsNext ? "X" : "O";
+      onPlay(nextSquares);
+    }
+  }
+
+  return (
+    <>
+      <div className="status">{status}</div>
+      {[...Array(3).keys()].map((row) => (
+        <div key={row} className="board-row">
+          {[...Array(3).keys()].map((col) => (
+            <Square
+              key={3 * row + col}
+              value={squares[3 * row + col]}
+              onSquareClick={() => handleClick(3 * row + col)}
+              addWinnerDecoration={
+                cells ? cells.includes(3 * row + col) : false
+              }
+            />
+          ))}
+        </div>
+      ))}
+    </>
+  );
 }
 
 export default function Game() {
 
   const [history, setHistory] = useState([Array(9).fill(null)]);
   const [xIsNext, setXIsNext] = useState(true);
+  const [isDescenOrder, setIsDecenOrder] = useState(false);
   const currentSquares = history[history.length - 1];
   
   function handlePlay(nextSquares) {
@@ -60,29 +83,43 @@ export default function Game() {
     setXIsNext(!xIsNext);
   }
 
+  function handleReorder(descendOrAscend) {
+    if (isDescenOrder !== descendOrAscend) {
+      setIsDecenOrder(descendOrAscend);
+    }
+  }
+
   function jumpToPlay(i) {
     setHistory(history.slice(0, i));
     setXIsNext(0 === (i+1)%2);
   }
 
+  function changeMoveOrder(arr) {
+    return isDescenOrder ? arr.reverse() : arr;
+  }
+
   return (
     <div className="game">
       <div className="game-board">
-        <Board
-          squares={currentSquares}
-          xIsNext={xIsNext}
-          onPlay={handlePlay}
-        />
+        <Board squares={currentSquares} xIsNext={xIsNext} onPlay={handlePlay} />
+        <MovesListOrder isDescenOrder={isDescenOrder} onReorder={handleReorder} />
       </div>
       <div className="game-info">
         <ol>
-          {history.map((squares, i) => 
-            <li key={i}>
-              <button onClick={() => jumpToPlay(i+1)}>
-                {i !== 0 ? `Go to move #${i+1}` : `Go to game start`}
-              </button>
-            </li>
-          )}
+          {changeMoveOrder(
+            history.map((squares, i, arr) => (
+              <li key={i}>
+                {i + 1 < arr.length ? (
+                  <button onClick={() => jumpToPlay(i + 1)}>
+                    {i !== 0 ? `Go to ${determineLastMove(arr[i], arr[i-1])}` : "Go to game start"}
+                  </button>
+                ) : (
+                  <p>
+                    {i !== 0 ? `You are at ${determineLastMove(arr[i], arr[i-1])}` : "You are at the game start"}
+                  </p>
+                )}
+              </li>
+            )))}
         </ol>
       </div>
     </div>
@@ -90,6 +127,10 @@ export default function Game() {
 }
 
 function calculateWinner(squares) {
+  const result = {
+    winner: undefined,
+    cells: [],
+  };
   const possibilities = [
     [0,1,2],
     [3,4,5],
@@ -103,8 +144,17 @@ function calculateWinner(squares) {
   for(let i = 0; i < possibilities.length; i++) {
     const [a, b, c] = possibilities[i];
     if (squares[a] && squares[a] === squares[b] && squares[a] === squares[c]) {
-      return squares[a];
+      result.winner = squares[a];
+      result.cells = [a, b, c];
     }
   }
-  return null;
+  return result;
+}
+
+function determineLastMove(currSquares, prevSquares) {
+  for (let i = 0; i < currSquares.length; i++) {
+    if (currSquares[i] && currSquares[i] !== prevSquares[i]) {
+      return `${currSquares[i]}: row=${1+Math.trunc(i/3)}, col=${1+i%3}`;
+    }
+  }
 }

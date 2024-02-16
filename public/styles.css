@@ -50,3 +50,17 @@ ul {
 .game-info {
   margin-left: 20px;
 }
+
+.game-info li p {
+  margin: 0;
+  font-size: 0.85em;
+  padding: 1px 4px;
+}
+
+.game-order label {
+  font-size: 0.85em;
+}
+
+.square-winner {
+  background-color: red;
+}
